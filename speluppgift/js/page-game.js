@@ -35,8 +35,7 @@ App.pages.game = (function () {
     var livesRow = h('div', { class: 'hud-lives', 'aria-label': 'Liv' });
     var lifeIcons = [];
     for (var i = 0; i < START_LIVES; i++) {
-      var icon = h('img', { alt: '' });
-      App.sprites.bindSprite(icon, 'life');
+      var icon = App.sprites.view('life', { maxW: 64, maxH: 26 });
       lifeIcons.push(icon);
       livesRow.appendChild(icon);
     }
@@ -131,8 +130,8 @@ App.pages.game = (function () {
 
     function syncHud() {
       scoreValue.textContent = String(g.score);
-      lifeIcons.forEach(function (img, index) {
-        img.classList.toggle('spent', index >= g.lives);
+      lifeIcons.forEach(function (icon, index) {
+        icon.classList.toggle('spent', index >= g.lives);
       });
     }
 
@@ -374,24 +373,19 @@ App.pages.game = (function () {
 
     /* --- Draw ------------------------------------------------------------ */
     function drawSprite(id, x, y, w, hgt) {
-      var img = App.sprites.currentImage(id);
-      if (img) {
-        ctx.drawImage(img, x, y, w, hgt);
-      } else {
-        var def = App.store.def(id);
-        ctx.fillStyle = def ? def.fill : '#ccc';
-        ctx.fillRect(x, y, w, hgt);
-      }
+      // Draws the current frame (or GIF frame) where the editor placed it.
+      if (App.sprites.draw(ctx, id, x, y, w, hgt)) return;
+      var def = App.store.def(id);
+      ctx.fillStyle = def ? def.fill : '#ccc';
+      ctx.fillRect(x, y, w, hgt);
     }
 
     function drawBackground() {
-      var img = App.sprites.currentImage('background');
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, W, H);
-      if (!img) return;
       var x = -g.bgX;
-      ctx.drawImage(img, x, 0, BG_W, H);
-      ctx.drawImage(img, x + BG_W, 0, BG_W, H);
+      App.sprites.draw(ctx, 'background', x, 0, BG_W, H);
+      App.sprites.draw(ctx, 'background', x + BG_W, 0, BG_W, H);
     }
 
     function draw() {
@@ -516,24 +510,12 @@ App.pages.game = (function () {
 
       App.store.SPRITES.forEach(function (def) {
         var stored = App.store.sprite(def.id);
-        var preview = h('img', { alt: def.name });
-        App.sprites.bindSprite(preview, def.id);
+        // Shown at its real game size, unless it is larger than the box.
+        var preview = App.sprites.view(def.id, { maxW: 80, maxH: 80, upscale: !def.resizable });
 
         var box = h('div', { class: 'size-preview' }, preview);
 
-        function applyPreview() {
-          var s = App.store.sprite(def.id);
-          if (!def.resizable) {
-            preview.style.width = '100%';
-            preview.style.height = 'auto';
-            return;
-          }
-          var scale = Math.min(1, 80 / Math.max(s.w, s.h));
-          preview.style.width = Math.round(s.w * scale) + 'px';
-          preview.style.height = Math.round(s.h * scale) + 'px';
-          preview.style.objectFit = 'fill';
-        }
-        applyPreview();
+        function applyPreview() { preview.refresh(); }
 
         var fields = h('div', { class: 'size-fields' }, h('div', { class: 'name', text: def.name }));
 
@@ -541,7 +523,8 @@ App.pages.game = (function () {
           ['w', 'h'].forEach(function (key) {
             var readout = h('span', { class: 'num', text: stored[key] + '' });
             var slider = h('input', {
-              type: 'range', min: '12', max: '200', step: '1', value: String(stored[key]),
+              type: 'range', min: String(App.store.SIZE_MIN), max: String(App.store.SIZE_MAX),
+              step: '1', value: String(stored[key]),
               'aria-label': def.name + (key === 'w' ? ' bredd' : ' höjd')
             });
             slider.addEventListener('input', function () {
@@ -611,10 +594,9 @@ App.pages.game = (function () {
     [['player', 'du'], ['hazard', 'undvik'], ['point', '+1 poäng'], ['life', 'liv kvar']]
       .forEach(function (pair) {
         var def = App.store.def(pair[0]);
-        var img = h('img', { alt: def.name });
-        App.sprites.bindSprite(img, pair[0]);
+        var icon = h('span', { class: 'legend-icon' }, App.sprites.view(pair[0], { maxW: 28, maxH: 28 }));
         legend.appendChild(h('span', { class: 'item' }, [
-          img, h('span', { text: def.name + ' — ' + pair[1] })
+          icon, h('span', { text: def.name + ' — ' + pair[1] })
         ]));
       });
 

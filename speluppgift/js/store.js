@@ -93,13 +93,14 @@ App.store = (function () {
     '<li>Skissa för hand eller digitalt. Bestäm en tydlig idé innan ni börjar rita rent.</li>',
     '<li>Rita rent i valfritt program och exportera som <strong>PNG med genomskinlig bakgrund</strong>.</li>',
     '<li>Gå till <strong>Editor</strong> och dra in bilderna på rätt plats.</li>',
-    '<li>Vill ni animera något — lägg till fler bildrutor med <strong>+</strong>. Två eller fler rutor spelas upp i 3 bilder per sekund.</li>',
+    '<li>Vill ni animera något — lägg till fler bildrutor med <strong>+</strong> (två eller fler rutor spelas upp i 3 bilder per sekund), eller ladda upp en animerad GIF.</li>',
+    '<li>Flytta och skala bilden i rutan tills den sitter rätt. Rutan är spritens storlek i spelet och kan göras bredare eller högre med de orange handtagen.</li>',
     '<li>Testa i <strong>Spelet</strong> och justera tills det känns rätt.</li>',
     '</ol>',
     '<h2>Tekniska krav</h2>',
     '<ul>',
-    '<li>Format: PNG (genomskinlig bakgrund) eller JPG för bakgrunden.</li>',
-    '<li>Rita kvadratiskt, ca 512 × 512 px, för Spelare, Aj, Poäng och Liv.</li>',
+    '<li>Format: PNG (genomskinlig bakgrund), GIF för animationer, eller JPG för bakgrunden.</li>',
+    '<li>Spelare, Aj, Poäng och Liv: ca 512 px på längsta sidan. De behöver inte vara kvadratiska.</li>',
     '<li>Bakgrunden ritas liggande och bred, ca 1500 × 300 px. Den rullar i sidled och loopar.</li>',
     '<li>Motivet ska läsas tydligt i liten storlek — testa alltid i spelet.</li>',
     '</ul>',
@@ -114,14 +115,19 @@ App.store = (function () {
     '<p class="muted">Inlämning: visa spelet på skärmen och lämna in era källfiler i Classroom.</p>'
   ].join('');
 
-  /* --- State ------------------------------------------------------------- */
+  /* --- State -------------------------------------------------------------
+     A sprite is a box of w × h game pixels (its size and hit box in the game)
+     holding one or more frames. A frame is { src, box } or null (an empty
+     holder). `box` places the picture inside the sprite as fractions of the
+     sprite's width and height ({ x, y, w, h }); null means "fit inside,
+     keep the proportions", which is also what every new upload gets. */
   function freshSprite(id) {
     var def = BY_ID[id];
-    return { frames: [defaultFrame(id)], w: def.w, h: def.h };
+    return { frames: [{ src: defaultFrame(id), box: null }], w: def.w, h: def.h };
   }
 
   function freshState() {
-    var s = { version: 1, sprites: {}, doc: DEFAULT_DOC, highScore: 0 };
+    var s = { version: 2, sprites: {}, doc: DEFAULT_DOC, highScore: 0 };
     SPRITES.forEach(function (def) { s.sprites[def.id] = freshSprite(def.id); });
     return s;
   }
@@ -140,9 +146,14 @@ App.store = (function () {
         if (!stored) return;
         var target = next.sprites[def.id];
         if (Array.isArray(stored.frames) && stored.frames.length) {
-          // `null` is a legal value: an empty frame holder.
+          // `null` is a legal value: an empty frame holder. Version 1 stored
+          // plain data URLs; those become frames that fit inside the sprite.
           target.frames = stored.frames.map(function (f) {
-            return typeof f === 'string' && f ? f : null;
+            if (typeof f === 'string') return f ? { src: f, box: null } : null;
+            if (f && typeof f === 'object' && typeof f.src === 'string' && f.src) {
+              return { src: f.src, box: cleanBox(f.box) };
+            }
+            return null;
           });
         }
         if (def.resizable) {
@@ -154,8 +165,21 @@ App.store = (function () {
     return next;
   }
 
+  var SIZE_MIN = 8;
+  var SIZE_MAX = 320;
+
   function clampSize(v) {
-    return Math.max(8, Math.min(320, Math.round(v)));
+    return Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(v)));
+  }
+
+  function round5(v) { return Math.round(v * 1e5) / 1e5; }
+
+  /** A valid placement box, or null for "fit inside". */
+  function cleanBox(box) {
+    if (!box || typeof box !== 'object') return null;
+    var x = Number(box.x), y = Number(box.y), w = Number(box.w), h = Number(box.h);
+    if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return null;
+    return { x: round5(x), y: round5(y), w: round5(w), h: round5(h) };
   }
 
   function load() {
@@ -194,6 +218,9 @@ App.store = (function () {
   var api = {
     GAME: GAME,
     SPRITES: SPRITES,
+    SIZE_MIN: SIZE_MIN,
+    SIZE_MAX: SIZE_MAX,
+    clampSize: clampSize,
 
     def: function (id) { return BY_ID[id]; },
 
@@ -201,18 +228,52 @@ App.store = (function () {
 
     sprite: function (id) { return state.sprites[id]; },
 
-    /** Frames with the empty holders stripped out — what the game renders. */
+    /** Frames ({ src, box }) with the empty holders stripped out — what the game renders. */
     framesOf: function (id) {
       var s = state.sprites[id];
       if (!s) return [];
       return s.frames.filter(function (f) { return !!f; });
     },
 
+    /** Put a new picture in a holder. It starts out fitted inside the sprite. */
     setFrame: function (id, index, dataUrl) {
       var s = state.sprites[id];
       if (!s || index < 0 || index >= s.frames.length) return;
-      s.frames[index] = dataUrl;
+      s.frames[index] = { src: dataUrl, box: null };
       commit({ type: 'sprite', id: id });
+    },
+
+    /**
+     * Move/resize the picture inside the sprite. `box` is in fractions of the
+     * sprite size; null fits it inside again. With { live: true } the change
+     * is only kept in memory (used while dragging) — call again without it
+     * to save.
+     */
+    setFrameBox: function (id, index, box, opts) {
+      var s = state.sprites[id];
+      var frame = s && s.frames[index];
+      if (!frame) return;
+      s.frames[index] = { src: frame.src, box: cleanBox(box) };
+      if (!(opts && opts.live)) commit({ type: 'sprite', id: id });
+    },
+
+    /**
+     * Change the sprite's size and, in the same step, the boxes of all its
+     * frames (one entry per holder, as returned by `frames`). Used by the
+     * editor, where resizing the sprite keeps the pictures where they are.
+     */
+    setShape: function (id, w, h, boxes, opts) {
+      var s = state.sprites[id];
+      var def = BY_ID[id];
+      if (!s || !def || !def.resizable) return;
+      s.w = clampSize(w);
+      s.h = clampSize(h);
+      if (boxes) {
+        s.frames = s.frames.map(function (f, i) {
+          return f ? { src: f.src, box: cleanBox(boxes[i]) } : null;
+        });
+      }
+      if (!(opts && opts.live)) commit({ type: 'size', id: id });
     },
 
     addFrame: function (id) {

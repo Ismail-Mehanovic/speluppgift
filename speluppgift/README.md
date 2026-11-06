@@ -55,8 +55,8 @@ klick/tapp i spelytan) ger en knuff uppåt.
   spelytan och **game over**-kortet dyker upp med **Starta om** och
   **Redigera sprites**.
 * **Redigera sprites** (finns även som **Storlekar** i sidhuvudet) visar alla
-  sprites och låter dig ändra bredd och höjd på var och en. Bakgrundens mått är
-  låsta.
+  sprites och låter dig ändra bredd och höjd på var och en. Här skalas hela
+  spriten — bilden följer med. Bakgrundens mått är låsta.
 * `Esc` pausar. Byter man flik pausas spelet automatiskt.
 
 Bakgrunden är alltid 3× så bred som spelytan (2700 × 540 px) och rullar från
@@ -78,6 +78,23 @@ Varje sprite byggs av en eller flera **bildrutor**:
   helt (den sista rutan blir alltid kvar).
 * Drar man in flera filer samtidigt hamnar den första i rutan och resten läggs
   till som nya bildrutor — snabbaste sättet att göra en animation.
+* En **animerad GIF** spelas upp med sin egen hastighet, både i editorn och i
+  spelet. Den kan kombineras med fler bildrutor.
+
+Varje bildruta visar spriten som en **ruta** — exakt det som ritas i spelet,
+och samma ruta som används för träffar:
+
+* **Bilden** flyttas genom att man drar i den och ändrar storlek med hörnen
+  (proportionerna behålls; håll **Shift** för fri form). Den fäster mot mitten
+  och kanterna (håll **Alt** för att slippa). Det som hamnar utanför rutan
+  syns blekt och klipps bort i spelet. Med tangentbordet: piltangenter flyttar,
+  `+`/`−` ändrar storlek, `0` passar in.
+* **Passa in** visar hela bilden centrerad (så hamnar nya bilder), **Fyll ut**
+  låter bilden täcka hela rutan.
+* **Rutan** ändras med de orange handtagen på sidorna — den behöver alltså inte
+  vara kvadratisk. Det ändrar spritens bredd och höjd i spelet (8–320 px).
+  Bilderna behåller sin storlek och sin plats i förhållande till mitten.
+  Bakgrundens ruta är låst.
 
 Standardgrafiken är enkla färgrutor med spritens namn på. **Återställ till
 standard** tar tillbaka dem.
@@ -87,15 +104,22 @@ standard** tar tillbaka dem.
 PNG med genomskinlig bakgrund fungerar bäst. JPG, GIF och SVG går också.
 
 Bilderna skalas ned innan de sparas (längsta sidan 512 px, 1600 px för
-bakgrunden) eftersom localStorage bara rymmer några megabyte. SVG och GIF sparas
-i original om filen är liten — då behåller GIF:en sin egen animation och SVG:en
-är fortfarande skarp i alla storlekar.
+bakgrunden) eftersom localStorage bara rymmer några megabyte. SVG sparas i
+original om filen är liten, så den är skarp i alla storlekar.
+
+Animerade GIF:ar sparas som GIF och fortsätter animera. Är filen större än
+ca 650 kB (eller bilden större än gränsen ovan) packas den om: den skalas ned
+tills den får plats, och bara om den då skulle bli väldigt liten tas varannan
+bildruta bort. Spelets canvas kan bara rita en GIF:s första bild, så
+`js/gif.js` avkodar GIF:en och spelet väljer rätt bild efter GIF:ens egen
+tidtabell.
 
 ## Var sparas allt?
 
-Allt — bilder, storlekar, projektbeskrivning och rekord — ligger i webbläsarens
-`localStorage` under nyckeln `speluppgift.v1`, och skrivs direkt när något
-ändras. Det betyder att varje dator (och varje webbläsare) har sin egen
+Allt — bilder, bildernas placering, storlekar, projektbeskrivning och rekord —
+ligger i webbläsarens `localStorage` under nyckeln `speluppgift.v1`, och skrivs
+direkt när något ändras. (Äldre sparad data, där bildrutorna bara var bilder,
+läses in automatiskt.) Det betyder att varje dator (och varje webbläsare) har sin egen
 uppsättning grafik. Har du editorn öppen i en flik och spelet i en annan
 uppdateras spelet automatiskt.
 
@@ -120,7 +144,8 @@ index.html          sidskal
 server.js           liten statisk server utan beroenden
 css/style.css       hela formgivningen
 js/store.js         all sparad data + standardgrafiken
-js/sprites.js       bildcache, 3 fps-klockan, filinläsning
+js/gif.js           avkodar/kodar GIF:ar (för animation i spelet och ompackning)
+js/sprites.js       bildcache, GIF-uppspelning, 3 fps-klockan, förhandsvisningar, filinläsning
 js/ui.js            DOM-hjälpare, modaler, notiser
 js/router.js        /home, /game, /editor
 js/page-home.js     startsida + dokumentet

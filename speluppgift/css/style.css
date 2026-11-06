@@ -238,6 +238,23 @@ a { color: var(--accent-dark); }
   color: var(--text-faint);
 }
 
+/* A live sprite preview: a box with the sprite's proportions and the
+   current frame placed in it the way the game draws it. */
+.sprite-view {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.sprite-view > .sv-img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+}
+
 /* ==========================================================================
    Home
    ========================================================================== */
@@ -426,14 +443,11 @@ a { color: var(--accent-dark); }
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
-.hud-lives img {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
+.hud-lives .sprite-view {
   display: block;
   transition: opacity .25s ease, transform .25s ease;
 }
-.hud-lives img.spent { opacity: .18; transform: scale(.86); }
+.hud-lives .sprite-view.spent { opacity: .18; transform: scale(.86); }
 
 /* Overlays */
 .overlay {
@@ -510,10 +524,13 @@ a { color: var(--accent-dark); }
   font-size: .9rem;
   color: var(--text-soft);
 }
-.legend .item img {
+.legend-icon {
   width: 28px;
   height: 28px;
-  object-fit: contain;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .legend kbd {
   font-family: var(--font-mono);
@@ -553,7 +570,7 @@ a { color: var(--accent-dark); }
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-.size-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.size-preview .sprite-view { box-shadow: 0 0 0 1px var(--border); }
 
 .size-fields { flex: 1 1 auto; min-width: 0; }
 .size-fields .name { font-size: .95rem; margin-bottom: 8px; }
@@ -639,7 +656,7 @@ a { color: var(--accent-dark); }
   background-position: 0 0, 6px 6px;
   overflow: hidden;
 }
-.thumb-img img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.thumb-img .sprite-view { box-shadow: 0 0 0 1px rgba(31, 30, 29, .12); }
 
 .thumb-meta { min-width: 0; }
 .thumb-meta .n { font-size: .95rem; }
@@ -685,7 +702,7 @@ a { color: var(--accent-dark); }
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-.live-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.live-preview .sprite-view { box-shadow: 0 0 0 1px rgba(31, 30, 29, .12); }
 .live-preview .cap { font-size: .78rem; color: var(--text-faint); line-height: 1.35; }
 
 .strip-scroll {
@@ -704,7 +721,7 @@ a { color: var(--accent-dark); }
 
 .holder {
   position: relative;
-  width: 320px;
+  width: 340px;
   flex: 0 0 auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -729,51 +746,157 @@ a { color: var(--accent-dark); }
   color: var(--text-faint);
 }
 
-.holder-canvas {
+/* The stage around the sprite box; the box is the sprite as it is in the game. */
+.holder-stage {
   position: relative;
-  height: 260px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 280px;
   border-radius: var(--radius);
+  background:
+    radial-gradient(circle, rgba(31, 30, 29, .07) 1px, transparent 1.5px) 0 0 / 14px 14px,
+    var(--bg-sunken);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.holder.wide { width: 640px; }
+.holder.wide .holder-stage { height: 220px; }
+
+.artboard {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
   background:
     linear-gradient(45deg, #f2f0e9 25%, transparent 25%, transparent 75%, #f2f0e9 75%),
     linear-gradient(45deg, #f2f0e9 25%, #fff 25%, #fff 75%, #f2f0e9 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
-  overflow: hidden;
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-sm);
 }
-.holder-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
-.holder.wide { width: 620px; }
-.holder.wide .holder-canvas { height: 220px; }
+.art-img,
+.art-ghost {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+/* The part of the picture outside the sprite: visible, but clearly cut off. */
+.art-ghost { z-index: 0; opacity: .28; }
 
-.dropzone {
+.pic-frame {
+  position: absolute;
+  z-index: 3;
+  cursor: move;
+  touch-action: none;
+  outline: 1px dashed transparent;
+  outline-offset: 0;
+  transition: outline-color .15s ease;
+}
+.holder:hover .pic-frame,
+.holder.dragging .pic-frame,
+.pic-frame:focus-visible { outline-color: var(--accent); }
+.pic-frame:focus-visible { outline-style: solid; border-radius: 0; }
+
+.pic-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  touch-action: none;
+  opacity: .55;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.holder:hover .pic-handle,
+.holder.dragging .pic-handle,
+.pic-frame:focus-visible .pic-handle { opacity: 1; }
+.pic-handle:hover { transform: scale(1.2); }
+.pic-handle::after { content: ""; position: absolute; inset: -8px; }   /* larger touch target */
+.pic-handle.nw { left: 0; top: 0; cursor: nwse-resize; }
+.pic-handle.ne { left: 100%; top: 0; cursor: nesw-resize; }
+.pic-handle.sw { left: 0; top: 100%; cursor: nesw-resize; }
+.pic-handle.se { left: 100%; top: 100%; cursor: nwse-resize; }
+
+/* Orange tabs just outside the sprite box: they change the sprite's size. */
+.side-handle {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface), var(--shadow-sm);
+  touch-action: none;
+  transition: background .15s ease;
+}
+.side-handle:hover { background: var(--accent-dark); }
+.side-handle::after { content: ""; position: absolute; inset: -9px; }
+.side-handle.n, .side-handle.s { width: 30px; height: 6px; cursor: ns-resize; }
+.side-handle.e, .side-handle.w { width: 6px; height: 30px; cursor: ew-resize; }
+
+.guide {
+  position: absolute;
+  z-index: 2;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Empty holder: the whole stage is the drop target. */
+.holder-stage.empty { cursor: pointer; transition: background-color .15s ease; }
+.holder-stage.empty .artboard {
+  background: rgba(255, 255, 255, .55);
+  box-shadow: none;
+  border: 1.5px dashed var(--border-strong);
+  pointer-events: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.holder-stage.empty:hover .artboard,
+.holder.drag .holder-stage.empty .artboard { border-color: var(--accent); background: var(--accent-soft); }
+
+.drop-label {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface-soft);
+  gap: 8px;
+  padding: 20px;
   color: var(--text-faint);
   font-size: .88rem;
   text-align: center;
-  padding: 20px;
-  cursor: pointer;
-  transition: border-color .15s ease, background .15s ease, color .15s ease;
+  pointer-events: none;
+  transition: color .15s ease;
 }
-.dropzone:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); }
-.dropzone svg { width: 30px; height: 30px; }
+.holder-stage.empty:hover .drop-label { color: var(--accent-dark); }
+.drop-label svg { width: 30px; height: 30px; }
+
+.holder-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 31px;
+  margin-top: 10px;
+}
+.holder-tools .tool-group { display: flex; gap: 4px; }
+.size-tag {
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
 
 .add-frame {
   flex: 0 0 auto;
   align-self: stretch;
   width: 92px;
-  min-height: 260px;
+  min-height: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -928,8 +1051,10 @@ a { color: var(--accent-dark); }
   .thumb { width: auto; flex: 0 0 auto; margin: 0; }
   .editor-head { flex-direction: column; padding: 20px 18px 14px; }
   .strip-scroll { padding: 18px; }
-  .holder { width: 260px; }
-  .holder.wide { width: 300px; }
+  .holder { width: 290px; }
+  .holder-stage { height: 250px; }
+  .holder.wide { width: 320px; }
+  .holder.wide .holder-stage { height: 150px; }
   .editor-foot { padding: 12px 18px; flex-wrap: wrap; }
 }
 
