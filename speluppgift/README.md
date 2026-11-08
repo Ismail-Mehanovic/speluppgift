@@ -15,8 +15,9 @@ node server.js          # eller: npm start
 Går det inte att köra Node? Vilken enkel statisk server som helst duger, t.ex.
 `python3 -m http.server 5173`. Man kan också öppna `index.html` direkt från
 disken — då byter appen automatiskt till adresser med `#`
-(`index.html#/game`). Vissa webbläsare blockerar sparning i det läget, så en
-lokal server är att föredra.
+(`index.html#game`). Vissa webbläsare blockerar sparning i det läget, så en
+lokal server är att föredra. Samma `#`-adresser används när appen visas inuti
+en annan sida (en iframe), t.ex. som en delad länk på claude.ai.
 
 ## De tre sidorna
 

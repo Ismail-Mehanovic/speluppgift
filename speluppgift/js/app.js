@@ -9,14 +9,12 @@
 
   App.router.start();
 
-  // Opened straight from disk: routing falls back to #-paths, which is fine,
-  // but localStorage is blocked in a few browsers under file://.
-  if (window.__FILE_MODE__) {
-    try {
-      localStorage.setItem('speluppgift.probe', '1');
-      localStorage.removeItem('speluppgift.probe');
-    } catch (err) {
-      App.ui.toast('Webbläsaren blockerar sparning när sidan öppnas som fil. Starta en lokal server (se README).', 'warn');
-    }
+  // localStorage is blocked in some browsers under file://, in private
+  // windows and in some embedded previews. Everything still works, but
+  // nothing is remembered after a reload — say so once.
+  if (!App.store.canSave()) {
+    App.ui.toast(window.__FILE_MODE__
+      ? 'Webbläsaren blockerar sparning när sidan öppnas som fil. Starta en lokal server (se README).'
+      : 'Webbläsaren blockerar sparning här — ändringarna försvinner när sidan laddas om.', 'warn');
   }
 })();

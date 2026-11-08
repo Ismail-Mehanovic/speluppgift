@@ -191,7 +191,20 @@ App.store = (function () {
     }
   }
 
+  /* Some browsers block localStorage (private windows, sandboxed frames,
+     pages opened from disk). The app still works then, it just forgets. */
+  var storageOk = (function () {
+    try {
+      localStorage.setItem(KEY + '.probe', '1');
+      localStorage.removeItem(KEY + '.probe');
+      return true;
+    } catch (err) {
+      return false;
+    }
+  })();
+
   function persist() {
+    if (!storageOk) return false;
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
       return true;
@@ -352,7 +365,10 @@ App.store = (function () {
       };
     },
 
-    reload: load
+    reload: load,
+
+    /** False when the browser does not let the app save anything. */
+    canSave: function () { return storageOk; }
   };
 
   load();

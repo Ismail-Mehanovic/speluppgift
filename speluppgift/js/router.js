@@ -1,14 +1,19 @@
 /* ==========================================================================
    router.js — three real routes: /home, /game, /editor.
    Uses the History API when served over http(s) and falls back to hash routes
-   when the file is opened straight from disk (file://).
+   (#home, #game, #editor) when the file is opened straight from disk
+   (file://) or when the app runs inside a frame, such as a hosted preview,
+   where the address bar belongs to the page around it.
    ========================================================================== */
 
 window.App = window.App || {};
 
 App.router = (function () {
   var KNOWN = ['/home', '/game', '/editor'];
-  var HASH_MODE = location.protocol === 'file:';
+  var IN_FRAME = (function () {
+    try { return window.self !== window.top; } catch (e) { return true; }
+  })();
+  var HASH_MODE = location.protocol === 'file:' || IN_FRAME;
 
   /* Works both at the domain root and inside a subfolder (GitHub Pages). */
   var BASE = (function () {
@@ -43,7 +48,19 @@ App.router = (function () {
   }
 
   function href(path) {
-    return HASH_MODE ? '#' + path : (BASE + path || '/');
+    // Hash routes are plain names (#game); old links with #/game still work.
+    return HASH_MODE ? '#' + path.replace(/^\//, '') : (BASE + path || '/');
+  }
+
+  /** Update the address. Sandboxed frames may refuse the History API; a plain hash change still works there. */
+  function setUrl(path, replace) {
+    var url = href(path);
+    try {
+      if (replace) history.replaceState({ path: path }, '', url);
+      else history.pushState({ path: path }, '', url);
+    } catch (err) {
+      if (HASH_MODE && !replace) location.hash = url;
+    }
   }
 
   function register(path, config) {
@@ -79,8 +96,7 @@ App.router = (function () {
     opts = opts || {};
     path = normalise(path);
     var url = href(path);
-    if (opts.replace) history.replaceState({ path: path }, '', url);
-    else history.pushState({ path: path }, '', url);
+    setUrl(path, opts.replace);
     render(path, opts);
   }
 
@@ -120,7 +136,11 @@ App.router = (function () {
     window.addEventListener('hashchange', function () { render(readLocation()); });
 
     var initial = readLocation();
-    history.replaceState({ path: initial }, '', href(initial));
+    setUrl(initial, true);
+
+    // The logo in the static markup points at /home; give it the right address here.
+    var brand = document.querySelector('.brand[data-link]');
+    if (brand) brand.setAttribute('href', href('/home'));
     render(initial, { force: true });
   }
 
